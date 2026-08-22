@@ -34,21 +34,22 @@ export const getHighScores = (): HighScores => {
 export const addHighScore = (
   difficulty: Level,
   time: number,
-): { scores: HighScoreEntry[]; rank: number } => {
+): { scores: HighScoreEntry[]; rank: number | null } => {
   const scores = getHighScores();
   const entry: HighScoreEntry = { time, date: new Date().toISOString() };
   const updated = [...scores[difficulty], entry]
     .sort((a, b) => a.time - b.time)
     .slice(0, MAX_ENTRIES);
 
-  const rank = updated.findIndex(
+  const idx = updated.findIndex(
     (e) => e.time === entry.time && e.date === entry.date,
   );
 
   scores[difficulty] = updated;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(scores));
 
-  return { scores: updated, rank: rank === -1 ? updated.length : rank + 1 };
+  // idx === -1 means the entry was cut off and didn't make the top 10
+  return { scores: updated, rank: idx === -1 ? null : idx + 1 };
 };
 
 export const formatTime = (seconds: number): string => {

@@ -11,6 +11,9 @@
     "core/*"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:sudoku": "cd apps/sudoku && npm run dev",
+    "setup": "npm install && npm run setup:core:ui",
+    "setup:core:ui": "cd core/ui && npm run build"
   }
 }

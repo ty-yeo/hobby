@@ -103,6 +103,18 @@
 - [x] On confirm: reset `board` back to the original given values (clear all user-entered values), clear all memos, keep `given` mask unchanged, reset timer to 0 and keep it running (or paused state as appropriate), reset hint/undo history state as appropriate
 - [x] On cancel: close dialog with no changes
 
+## Cupertino Theme
+
+- [x] Add `cupertino` to `UiTheme` union type and `VALID_THEMES` in `core/ui/src/theme/theme-context.tsx`
+- [x] Add Cupertino-style button variants to `core/ui/src/components/button.tsx` (iOS system blue `#007AFF`, rounded rectangle, no border on primary)
+- [x] Add Cupertino segmented control style to `core/ui/src/components/tabs.tsx` (gray pill track, white selected tab with shadow)
+- [x] Add Cupertino alert/sheet style to `core/ui/src/components/dialog.tsx` (white panel, `bg-black/40` backdrop, `rounded-2xl`)
+- [x] Update `App.tsx` to handle Cupertino background (`#F2F2F7`) and white card surface
+- [x] Add `cupertino` option to theme selector in `apps/sudoku/src/pages/menu.tsx`
+- [x] Add Cupertino styles to `NumberHintBar` (white container, iOS blue active state)
+- [x] Add Cupertino styles to `BoardCell` (white normal, `#007AFF/15` selected, `#007AFF/10` highlighted, `#F2F2F7` given)
+- [x] Add Cupertino styles to `Timer` (white panel, light border)
+
 ## Undo/Redo Feature
 
 - [x] Add icon-only Undo and Redo buttons next to the `Save` button (use simple icon glyphs/svg, no text label)
@@ -129,11 +141,27 @@
 
 ## Save Confirmation, Back Button, Hint Bar Placeholder, Material Theme
 
-- [ ] Clicking "Save" on the game page opens a confirmation `Dialog` before actually saving + navigating away (uses core/ui `Dialog` + `Button`); confirm saves and returns to menu, cancel closes dialog with no changes
-- [ ] Add a "Back" button on the game page (navigates to menu without saving); should prompt/pause appropriately similar to other navigation actions
-- [ ] When game is paused, hide `NumberHintBar` and the Hint `Button` visually but reserve their layout space (e.g. `invisible` instead of unmounting/conditional render) so the page doesn't shift
-- [ ] `core/ui`: Add a third `"material"` theme option to `ThemeProvider`/`useTheme` (Material Design style: elevation shadows, solid fill colors, ripple-like hover/active states) and make it the new default theme
-- [ ] `core/ui`: Branch `Button`, `Dialog`, `Tabs` styling for the `"material"` theme
-- [ ] `apps/sudoku`: Branch `App.tsx`, `Board`/`BoardCell`, `NumberHintBar`, `Timer` styling for the `"material"` theme
-- [ ] Update `Menu` page's Theme `Tabs` to include all three options (Glass / Neumorphism / Material)
-- [ ] Verify no TypeScript/lint errors across changed files; rebuild `core/ui` after changes
+- [x] Clicking "Save" on the game page opens a confirmation `Dialog` before actually saving + navigating away (uses core/ui `Dialog` + `Button`); confirm saves and returns to menu, cancel closes dialog with no changes
+- [x] Add a "Back" button on the game page (navigates to menu without saving); should prompt/pause appropriately similar to other navigation actions
+- [x] When game is paused, hide `NumberHintBar` and the Hint `Button` visually but reserve their layout space (e.g. `invisible` instead of unmounting/conditional render) so the page doesn't shift
+- [x] `core/ui`: Add a third `"material"` theme option to `ThemeProvider`/`useTheme` (Material Design style: elevation shadows, solid fill colors, ripple-like hover/active states) and make it the new default theme
+- [x] `core/ui`: Branch `Button`, `Dialog`, `Tabs` styling for the `"material"` theme
+- [x] `apps/sudoku`: Branch `App.tsx`, `Board`/`BoardCell`, `NumberHintBar`, `Timer` styling for the `"material"` theme
+- [x] Update `Menu` page's Theme `Tabs` to include all three options (Glass / Neumorphism / Material)
+- [x] Verify no TypeScript/lint errors across changed files; rebuild `core/ui` after changes
+
+## Board Validation
+
+### Fix: `text-red-500` not applying to cell text
+- [x] Root cause: `BoardCell` input and given-value span have hardcoded text color classes (`text-gray-900` / `text-gray-800`) that block CSS inheritance from a parent; parent-level `text-red-500` cannot override them
+- [x] Fix: make the text color class dynamic on the input/span directly, driven by the new `isInvalid` prop
+
+### Cell-level conflict highlighting
+- [x] Add `isInvalid?: boolean` prop to `BoardCell`; invalid cells show a red background tint and red text (user-placed only — given cells are never invalid)
+- [x] Add `invalidCells?: boolean[][]` prop to `Board` and thread it down to each `BoardCell`
+- [x] `computeInvalidCells(board, given)` in `game.tsx`: for every non-given, non-empty cell check for duplicate value in its row, column, or 3×3 box; mark as invalid if any conflict found
+
+### Board completability ("Game Over")
+- [x] `isBoardSolvable(board)` in `game.tsx`: backtracking solver that treats all currently filled cells as fixed and tries to complete the remaining empty cells; returns `false` when no completion is possible
+- [x] After every user move that places a value (`newValue !== 0`): if the board has any invalid cells OR the solver returns `false`, set `showGameOverDialog = true`; reset when the board returns to a solvable state
+- [x] "Game Over" `Dialog` (title "Game Over") explains the board cannot be completed; offers "Restart" (triggers full restart) and "Dismiss" (closes dialog without restarting — user keeps the broken state)

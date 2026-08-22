@@ -8,6 +8,8 @@ const THEME_OPTIONS: { value: UiTheme; label: string }[] = [
   { value: "material", label: "Material" },
   { value: "glass", label: "Glass" },
   { value: "neumorphism", label: "Neumorphism" },
+  { value: "cupertino", label: "Cupertino" },
+  { value: "cyberpunk", label: "Cyberpunk" },
 ];
 
 export const Menu = () => {

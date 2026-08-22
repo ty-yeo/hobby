@@ -1,15 +1,15 @@
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type FC,
-  type ReactNode,
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+    type FC,
+    type ReactNode,
 } from "react";
 
-export type UiTheme = "glass" | "neumorphism" | "material";
+export type UiTheme = "glass" | "neumorphism" | "material" | "cupertino" | "cyberpunk";
 
 const STORAGE_KEY = "uiTheme";
 
@@ -20,7 +20,7 @@ export type ThemeContextValue = {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-const VALID_THEMES: UiTheme[] = ["glass", "neumorphism", "material"];
+const VALID_THEMES: UiTheme[] = ["glass", "neumorphism", "material", "cupertino", "cyberpunk"];
 
 const readStoredTheme = (): UiTheme => {
   if (typeof window === "undefined") return "material";
