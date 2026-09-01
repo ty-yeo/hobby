@@ -83,7 +83,7 @@ export const Board = ({
   }`;
 
   return (
-    <div ref={wrapperRef} className="w-full">
+    <div ref={wrapperRef} className="w-full flex justify-center">
       {status === "paused" ? (
         <div
           className={`flex items-center justify-center rounded-2xl font-semibold text-lg ${
