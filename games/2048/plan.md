@@ -318,3 +318,42 @@ appearing elsewhere), so the final sequence is two steps:
       already showed `["4","2"]`, confirming the merged tile and the newly
       spawned tile both appeared together in the same step rather than the
       spawn waiting for a separate merge step to finish first
+
+## 14. Single-slot input queue (follow-up)
+
+Goal: moves made while `isAnimating` felt like they were silently ignored.
+Instead of dropping them, queue the latest one (a single slot — not a full
+FIFO queue, so spamming keys can't build up a backlog) and replay it
+automatically the instant the current animation finishes.
+
+- [x] `src/hooks/use-game-state.ts` — new `queuedDirectionRef` (a plain ref,
+      not state — the queued value doesn't need to trigger a render on its
+      own); `handleMove` now only _drops_ a move when the game has ended
+      (`won`/`lost`); while `isAnimating` it stashes the direction in the
+      ref (overwriting anything already queued) instead of returning a no-op
+- [x] A new effect watches `isAnimating`; when it flips back to `false`, it
+      reads and clears the queued direction (if any) and calls `handleMove`
+      again — since this runs in an effect (not inside the animation's own
+      `setTimeout` closure), it always sees the _latest_ `tiles`/`score`/
+      `status` from the render that just committed, avoiding the stale-
+      closure bug that would happen from calling `handleMove` directly out
+      of the original timeout chain
+- [x] The replayed move naturally goes through all of `handleMove`'s normal
+      guards — if the game ended during the first move's animation, the
+      queued move is silently discarded (blocked by the `won`/`lost` check);
+      if the queued direction turns out to be a no-op on the settled board,
+      it's a no-op exactly like a live no-op press
+- [x] `handleReset` clears `queuedDirectionRef` too, so a stale queued move
+      can't fire into a freshly reset board
+- [x] `turbo run lint build --filter=@games/2048 --filter=@app/game` passes
+      cleanly
+- [x] Verified in-browser with a deterministic seeded board: fired a merging
+      move, then fired a second (different direction) move ~50ms later,
+      still well inside the first move's ~300ms animation window; sampled
+      mid-animation and confirmed only the first move's slide was visible
+      (score already reflecting the first merge, second move not yet
+      applied); sampled again after the full window elapsed and confirmed a
+      third tile had appeared beyond what the first move alone would
+      produce, and the score matched "first move's merge, second move had
+      no merge of its own" — proving the queued second move automatically
+      replayed against the fully-settled post-first-move board

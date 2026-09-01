@@ -79,6 +79,10 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
   const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  // Single-slot queue: a move made while animating is stashed here,
+  // overwriting any previously queued move, and replayed once the
+  // animation finishes.
+  const queuedDirectionRef = useRef<Direction | null>(null);
   const isNew = searchParams.get("isNew") ?? "true";
 
   const clearAnimationTimeout = () => {
@@ -154,6 +158,10 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
   // The one entry point for applying a move — keyboard and touch input both
   // funnel through this so the two input modes can never behave differently.
   //
+  // A move made while `isAnimating` is queued (single slot, latest wins)
+  // instead of being dropped — see the effect below that replays it once
+  // the current animation finishes.
+  //
   // Animation is split into two sequential steps:
   //   1. Slide — tiles move toward the input direction; a merging pair both
   //      land on the same cell, still unmerged (two overlapping tiles).
@@ -162,7 +170,11 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
   //      (they're independent visual changes, so no need to sequence them).
   const handleMove = useCallback(
     (direction: Direction) => {
-      if (status === "won" || status === "lost" || isAnimating) return;
+      if (status === "won" || status === "lost") return;
+      if (isAnimating) {
+        queuedDirectionRef.current = direction;
+        return;
+      }
 
       const {
         tiles: mergedTiles,
@@ -205,6 +217,15 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
     },
     [tiles, score, status, isAnimating, timerRef, finishWin, finishLose],
   );
+
+  // Replay a queued move once the current animation finishes.
+  useEffect(() => {
+    if (isAnimating) return;
+    const queued = queuedDirectionRef.current;
+    if (!queued) return;
+    queuedDirectionRef.current = null;
+    handleMove(queued);
+  }, [isAnimating, handleMove]);
 
   // Keyboard input: arrow keys / WASD.
   useEffect(() => {
@@ -260,6 +281,7 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
 
   const handleReset = () => {
     clearAnimationTimeout();
+    queuedDirectionRef.current = null;
     setIsAnimating(false);
     setTiles(createInitialTiles());
     setScore(0);
