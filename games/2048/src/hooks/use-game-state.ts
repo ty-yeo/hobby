@@ -8,14 +8,15 @@ import {
   useState,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import { TILE_ANIMATION_MS } from "../components/tile";
 import {
-  createInitialBoard,
+  createInitialTiles,
   hasAvailableMoves,
   hasReachedTarget,
   move,
   spawnRandomTile,
-  type Board,
   type Direction,
+  type Tile,
 } from "../util/board";
 import { addHighScore } from "../util/highscore";
 
@@ -29,7 +30,7 @@ export type TimerHandle = {
 };
 
 type SavedGameState = {
-  board: Board;
+  tiles: Tile[];
   score: number;
   status: GameStatus;
   elapsedTime: number;
@@ -58,18 +59,30 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
   const navigate = useNavigate();
 
   const [isLoading, setIsLoading] = useState(true);
-  const [board, setBoard] = useState<Board>(() => createInitialBoard());
+  const [tiles, setTiles] = useState<Tile[]>(() => createInitialTiles());
   const [score, setScore] = useState(0);
   const [status, setStatus] = useState<GameStatus>("idle");
   const [finalTime, setFinalTime] = useState<number | null>(null);
   const [rank, setRank] = useState<number | null>(null);
+  // Blocks new moves while the 0.2s slide/merge transition is still playing.
+  const [isAnimating, setIsAnimating] = useState(false);
 
   const startTimeRef = useRef(0);
+  const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const isNew = searchParams.get("isNew") ?? "true";
+
+  const clearAnimationTimeout = () => {
+    if (animationTimeoutRef.current) {
+      clearTimeout(animationTimeoutRef.current);
+      animationTimeoutRef.current = null;
+    }
+  };
 
   useLayoutEffect(() => {
     if (isNew === "true") {
-      setBoard(createInitialBoard());
+      setTiles(createInitialTiles());
       setScore(0);
       setStatus("idle");
       setFinalTime(null);
@@ -79,12 +92,12 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
       const raw = localStorage.getItem(STORAGE_KEY);
       const saved = raw ? (JSON.parse(raw) as SavedGameState) : null;
       if (saved) {
-        setBoard(saved.board);
+        setTiles(saved.tiles);
         setScore(saved.score);
         setStatus(saved.status);
         startTimeRef.current = saved.elapsedTime;
       } else {
-        setBoard(createInitialBoard());
+        setTiles(createInitialTiles());
         setScore(0);
         setStatus("idle");
       }
@@ -100,6 +113,9 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading]);
+
+  // Cancel any pending animation-unlock timeout on unmount.
+  useEffect(() => clearAnimationTimeout, []);
 
   const finishWin = useCallback(
     (finalScore: number) => {
@@ -131,15 +147,23 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
   // funnel through this so the two input modes can never behave differently.
   const handleMove = useCallback(
     (direction: Direction) => {
-      if (status === "won" || status === "lost") return;
+      if (status === "won" || status === "lost" || isAnimating) return;
 
-      const { board: moved_board, moved, gained } = move(board, direction);
+      const { tiles: movedTiles, moved, gained } = move(tiles, direction);
       if (!moved) return;
 
-      const spawned = spawnRandomTile(moved_board);
+      const spawned = spawnRandomTile(movedTiles);
       const newScore = score + gained;
-      setBoard(spawned);
+      setTiles(spawned);
       setScore(newScore);
+
+      // Block further input until the slide/merge transition finishes.
+      setIsAnimating(true);
+      clearAnimationTimeout();
+      animationTimeoutRef.current = setTimeout(() => {
+        setIsAnimating(false);
+        animationTimeoutRef.current = null;
+      }, TILE_ANIMATION_MS);
 
       if (status === "idle") {
         setStatus("playing");
@@ -152,7 +176,7 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
         finishLose(newScore);
       }
     },
-    [board, score, status, timerRef, finishWin, finishLose],
+    [tiles, score, status, isAnimating, timerRef, finishWin, finishLose],
   );
 
   // Keyboard input: arrow keys / WASD.
@@ -208,7 +232,9 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
   }, [handleMove]);
 
   const handleReset = () => {
-    setBoard(createInitialBoard());
+    clearAnimationTimeout();
+    setIsAnimating(false);
+    setTiles(createInitialTiles());
     setScore(0);
     setStatus("idle");
     setFinalTime(null);
@@ -219,7 +245,7 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
 
   const handleSave = () => {
     const elapsedTime = timerRef.current?.getTime() ?? 0;
-    const payload: SavedGameState = { board, score, status, elapsedTime };
+    const payload: SavedGameState = { tiles, score, status, elapsedTime };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   };
 
@@ -227,7 +253,7 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
 
   return {
     isLoading,
-    board,
+    tiles,
     score,
     status,
     finalTime,

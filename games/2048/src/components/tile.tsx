@@ -2,7 +2,15 @@ import { useTheme, type UiTheme } from "@core/ui";
 
 export type TileProps = {
   value: number;
+  row: number;
+  col: number;
+  /** Pixel distance between adjacent cells' top-left corners. */
+  step: number;
+  cellSize: number;
 };
+
+// Keep in sync with the `duration-200` class below.
+export const TILE_ANIMATION_MS = 200;
 
 // Value -> palette index; each theme gets its own 11-color progression so
 // every tile value is visually distinct while staying on that theme's palette.
@@ -73,17 +81,17 @@ const TILE_COLORS: Record<UiTheme, string[]> = {
     "bg-[#5E5CE6] text-white",
   ],
   cyberpunk: [
-    "bg-[#0d0d1a] text-[#00e5ff] border border-[#00e5ff]/50 shadow-[0_0_8px_rgba(0,229,255,0.3)]",
-    "bg-[#0d0d1a] text-[#00e5ff] border border-[#00e5ff]/70 shadow-[0_0_10px_rgba(0,229,255,0.4)]",
-    "bg-[#150d1a] text-[#ff2d78] border border-[#ff2d78]/50 shadow-[0_0_8px_rgba(255,45,120,0.3)]",
-    "bg-[#150d1a] text-[#ff2d78] border border-[#ff2d78]/70 shadow-[0_0_10px_rgba(255,45,120,0.4)]",
-    "bg-[#0d1a12] text-[#00ffab] border border-[#00ffab]/50 shadow-[0_0_8px_rgba(0,255,171,0.3)]",
-    "bg-[#0d1a12] text-[#00ffab] border border-[#00ffab]/70 shadow-[0_0_10px_rgba(0,255,171,0.4)]",
-    "bg-[#1a170d] text-[#ffd60a] border border-[#ffd60a]/50 shadow-[0_0_8px_rgba(255,214,10,0.3)]",
-    "bg-[#1a170d] text-[#ffd60a] border border-[#ffd60a]/70 shadow-[0_0_10px_rgba(255,214,10,0.4)]",
-    "bg-[#1a0d17] text-[#ff00e5] border border-[#ff00e5]/50 shadow-[0_0_8px_rgba(255,0,229,0.3)]",
-    "bg-[#1a0d17] text-[#ff00e5] border border-[#ff00e5]/70 shadow-[0_0_10px_rgba(255,0,229,0.4)]",
-    "bg-black text-[#00e5ff] border-2 border-[#00e5ff] shadow-[0_0_20px_rgba(0,229,255,0.8)]",
+    "bg-[#0d1a1a] text-[#00e5ff] border border-[#00e5ff]/50 shadow-[0_0_8px_rgba(0,229,255,0.35)]",
+    "bg-[#0d0f1a] text-[#3d8bff] border border-[#3d8bff]/50 shadow-[0_0_8px_rgba(61,139,255,0.35)]",
+    "bg-[#150d1a] text-[#b026ff] border border-[#b026ff]/50 shadow-[0_0_8px_rgba(176,38,255,0.35)]",
+    "bg-[#1a0d17] text-[#ff2d78] border border-[#ff2d78]/50 shadow-[0_0_8px_rgba(255,45,120,0.35)]",
+    "bg-[#1a0d10] text-[#ff00e5] border border-[#ff00e5]/50 shadow-[0_0_8px_rgba(255,0,229,0.35)]",
+    "bg-[#1a0d0d] text-[#ff3b3b] border border-[#ff3b3b]/50 shadow-[0_0_8px_rgba(255,59,59,0.35)]",
+    "bg-[#1a120d] text-[#ff6a00] border border-[#ff6a00]/50 shadow-[0_0_8px_rgba(255,106,0,0.35)]",
+    "bg-[#1a170d] text-[#ffd60a] border border-[#ffd60a]/50 shadow-[0_0_8px_rgba(255,214,10,0.35)]",
+    "bg-[#171a0d] text-[#aaff00] border border-[#aaff00]/50 shadow-[0_0_8px_rgba(170,255,0,0.35)]",
+    "bg-[#0d1a12] text-[#00ffab] border border-[#00ffab]/50 shadow-[0_0_8px_rgba(0,255,171,0.35)]",
+    "bg-black text-white border-2 border-white shadow-[0_0_20px_rgba(255,255,255,0.8)]",
   ],
 };
 
@@ -93,33 +101,11 @@ const TILE_FALLBACK: Record<UiTheme, string> = {
   material: "bg-gray-900 text-white",
   cupertino: "bg-[#1C1C1E] text-white",
   cyberpunk:
-    "bg-black text-[#ff2d78] border-2 border-[#ff2d78] shadow-[0_0_20px_rgba(255,45,120,0.8)]",
+    "bg-[#1a0008] text-[#ff0044] border-2 border-[#ff0044] shadow-[0_0_20px_rgba(255,0,68,0.8)]",
 };
 
-export const Tile = ({ value }: TileProps) => {
+export const Tile = ({ value, row, col, step, cellSize }: TileProps) => {
   const { theme } = useTheme();
-  const isNeu = theme === "neumorphism";
-  const isMaterial = theme === "material";
-  const isCupertino = theme === "cupertino";
-  const isCyberpunk = theme === "cyberpunk";
-
-  if (value === 0) {
-    return (
-      <div
-        className={`w-full h-full rounded-lg ${
-          isNeu
-            ? "bg-gray-200 shadow-[inset_2px_2px_4px_rgba(0,0,0,0.15),inset_-2px_-2px_4px_rgba(255,255,255,0.7)]"
-            : isMaterial
-              ? "bg-gray-100"
-              : isCupertino
-                ? "bg-[#F2F2F7] border border-[#E5E5EA]"
-                : isCyberpunk
-                  ? "bg-[#1a1a2e] border border-[#00e5ff]/10"
-                  : "bg-white/20 border border-black/10"
-        }`}
-      />
-    );
-  }
 
   const index = VALUE_ORDER.indexOf(value);
   const colorClass =
@@ -128,7 +114,12 @@ export const Tile = ({ value }: TileProps) => {
 
   return (
     <div
-      className={`w-full h-full flex items-center justify-center rounded-lg font-bold select-none ${fontSizeClass} ${TILE_WRAPPER[theme]} ${colorClass}`}
+      className={`absolute top-0 left-0 flex items-center justify-center rounded-lg font-bold select-none transition-transform duration-200 ease-in-out ${fontSizeClass} ${TILE_WRAPPER[theme]} ${colorClass}`}
+      style={{
+        width: cellSize,
+        height: cellSize,
+        transform: `translate(${col * step}px, ${row * step}px)`,
+      }}
     >
       {value}
     </div>

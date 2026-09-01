@@ -9,7 +9,7 @@ export const Game = () => {
   const timerRef = useRef<TimerHandle | null>(null);
   const {
     isLoading,
-    board,
+    tiles,
     score,
     status,
     finalTime,
@@ -33,7 +33,7 @@ export const Game = () => {
         onSave={handleSave}
       />
 
-      <Board board={board} />
+      <Board tiles={tiles} />
 
       {status === "won" && (
         <p className="font-semibold text-green-700">

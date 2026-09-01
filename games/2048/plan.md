@@ -157,9 +157,52 @@ winning (reaching 2048) or losing (no more moves), not just on a win.
 - [x] `pages/leaderboard.tsx` row layout updated to show rank, score, time,
       and date (score is the primary sorted column now, not time)
 - [x] `turbo run lint build --filter=@games/2048 --filter=@app/game` passes
-      cleanly
 - [x] Verified in-browser: seeded four scores with a tie (same score,
       different times) and confirmed sort order is score descending with the
       faster time ranked above the slower one on a tie; played a real game to
       a win and confirmed the win message shows score + time + rank and the
       entry appears correctly ranked on the leaderboard
+
+## 10. Slide/merge animation with input locking (follow-up)
+
+Goal: tiles visually slide (and merge) into their new position over 0.2s
+instead of snapping instantly, and player input (keyboard/swipe) is ignored
+for the duration of that transition so a rapid second move can't interrupt
+or race the first one.
+
+- [x] `src/util/board.ts` rewritten from a plain `number[][]` grid to an
+      identity-based model — `Tile = { id, row, col, value }` — since
+      animating a _position change_ requires a stable key React can track
+      across renders; a value-only grid has no concept of "this cell's tile
+      moved from A to B"
+- [x] `move(tiles, direction)` now returns tiles with updated `row`/`col`
+      (preserving `id`, including through merges — the surviving tile keeps
+      the leading tile's `id`) instead of a fresh value grid
+- [x] `hasAvailableMoves`/`hasReachedTarget` reimplemented against `Tile[]`
+      (deriving a scratch grid internally where still convenient)
+- [x] `src/components/tile.tsx` — `Tile` now takes `row`, `col`, `step`,
+      `cellSize` and renders absolutely-positioned with
+      `transform: translate(col*step, row*step)` and
+      `transition-transform duration-200`; exports `TILE_ANIMATION_MS = 200`
+      so the hook's input-lock timer can never drift out of sync with the
+      CSS duration
+- [x] `src/components/board.tsx` — split into a static backdrop grid (empty
+      cell slots, CSS grid, never re-rendered per move) plus an absolutely
+      positioned tiles layer on top, so only the tiles layer re-renders/
+      animates on each move; sizing math updated to keep both layers pixel-
+      aligned
+- [x] `src/hooks/use-game-state.ts` — new `isAnimating` state; `handleMove`
+      early-returns while `isAnimating` (in addition to the existing
+      won/lost guard), and starts a `TILE_ANIMATION_MS` timeout after every
+      accepted move to clear it; the timeout is cleared/reset on Reset and
+      on unmount so it can never fire after the game state has moved on
+- [x] `SavedGameState`/localStorage save-load updated to persist `tiles`
+      instead of `board`
+- [x] `turbo run lint build --filter=@games/2048 --filter=@app/game` passes
+      cleanly
+- [x] Verified in-browser: confirmed the tile's `transition-duration` is
+      `0.2s` and its `transform` reflects the new grid position; fired a
+      merge move then immediately fired three more key presses within the
+      200ms window and confirmed none of them registered (score/tile count
+      unchanged mid-animation); confirmed a move fired after the window
+      closes registers normally
