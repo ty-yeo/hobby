@@ -206,3 +206,115 @@ or race the first one.
       200ms window and confirmed none of them registered (score/tile count
       unchanged mid-animation); confirmed a move fired after the window
       closes registers normally
+
+## 11. Merge color-mixing animation (follow-up)
+
+Goal: when two tiles merge, their color transitions (mixes) into the merged
+value's color over 0.1s, instead of snapping instantly, on top of the
+existing 0.2s slide.
+
+- [x] `src/components/tile.tsx` — replaced the `transition-transform
+duration-200` Tailwind classes with an explicit inline `transition`
+      shorthand so `transform` and color-related properties can run at two
+      different durations on the same element: `transform 200ms`,
+      `background-color`/`color`/`border-color`/`box-shadow` all at a new
+      `MERGE_COLOR_MS = 100`
+- [x] No extra state/flag needed to detect "this tile just merged" — a
+      tile's color is fully derived from its `value`, and `value` only ever
+      changes on a merge (sliding without merging never changes `value`), so
+      the color transition is a no-op for every tile except the one that
+      just merged
+- [x] Border-color/box-shadow included (not just background/text) so the
+      cyberpunk theme's neon border+glow also mixes smoothly, since its
+      per-value color entries bundle border/shadow together with
+      background/text
+- [x] `turbo run lint build --filter=@games/2048 --filter=@app/game` passes
+      cleanly
+- [x] Verified in-browser: seeded two adjacent equal tiles, merged them, and
+      sampled the surviving tile's computed `background-color` ~40ms into
+      the transition — confirmed it was a genuine interpolated blend
+      (`oklab(...)`) between the pre-merge and post-merge colors, not an
+      instant snap
+
+## 12. Two-phase animation split (follow-up)
+
+Goal: separate the per-move animation into two sequential, non-overlapping
+steps instead of one — (1) existing tiles slide toward the input direction
+and merge, (2) only once that settles does a new tile appear — rather than
+the new tile popping in at the same instant the slide starts.
+
+- [x] `src/hooks/use-game-state.ts` `handleMove` now runs in two chained
+      steps: phase 1 sets `tiles` to the `move()` result (slide/merge only,
+      no spawn) and starts a `TILE_ANIMATION_MS` (200ms) timeout; when that
+      fires, phase 2 calls `spawnRandomTile` and sets `tiles` again — the new
+      tile literally does not exist in state (or the DOM) until phase 1's
+      timeout fires
+- [x] `isAnimating` now spans both phases combined (200ms slide + 100ms
+      spawn = 300ms) via a second chained timeout, so input stays locked
+      until the new tile has finished popping in, not just until the slide
+      finishes
+- [x] Win/loss detection (`hasReachedTarget`/`hasAvailableMoves`) still runs
+      against the post-spawn tile set, at the end of phase 2 — unchanged
+      from before, just relocated to the new phase-2 callback
+- [x] `src/components/tile.tsx` — new tiles now play their own distinct
+      entrance animation instead of appearing at full size instantly: a
+      `phase` state (`initial` → `entering` → `settled`) scales the tile
+      from 0 to 1 over a new `SPAWN_ANIMATION_MS = 100` using a
+      `transform`-only transition, then swaps back to the steady-state
+      slide/merge transition once settled — existing tiles (including merge
+      survivors, which keep their original `id`) never remount, so they
+      skip straight to `settled` and never replay this entrance
+- [x] `turbo run lint build --filter=@games/2048 --filter=@app/game` passes
+      cleanly
+- [x] Verified in-browser with a deterministic seeded board: sampled the
+      tile count at ~100ms into a move (mid slide) and confirmed it was
+      still the pre-move count (no new tile yet); sampled again at ~250ms
+      and confirmed the new tile had appeared only then; confirmed the
+      combined ~300ms input lock via a follow-up deterministic move —
+      mid-slide (120ms) still showed the pre-move tile set, and the new
+      tile only appeared after the full phase 1 + phase 2 window elapsed
+
+## 13. Merge separated from slide, then merged back with spawn (follow-up, supersedes §12)
+
+Section 12 combined "slide" and "merge" into a single step (`move()` applied
+both at once) — that was wrong, merging needed to be its own visually
+distinct step from sliding. It was then further refined: merge and spawn
+turned out fine to run _simultaneously_ (they're independent visual changes
+— one is a tile's color/value settling, the other is a brand-new tile
+appearing elsewhere), so the final sequence is two steps:
+
+1. **Slide** — tiles move toward the input direction; a pair about to merge
+   both land on the _same_ cell, still as two separate (unmerged) tiles.
+2. **Merge + spawn (simultaneous)** — once the slide settles, overlapping
+   pairs collapse into one doubled-value tile (§11's color-mix transition)
+   _and_ a new tile appears, both in the same state update.
+
+- [x] `src/util/board.ts` `move()` returns `{ tiles, slid, moved, gained }`
+      instead of just `{ tiles, moved, gained }` — `slid` is every original
+      tile repositioned to its post-slide slot (a merging pair both point at
+      the identical destination cell, values/ids untouched); `tiles` is the
+      final collapsed result as before (merged pairs keep the leading tile's
+      `id` with the doubled value)
+- [x] `src/components/tile.tsx` — renamed the exported `MERGE_COLOR_MS`
+      constant to `MERGE_ANIMATION_MS` so `use-game-state.ts` can schedule
+      the settle step's timeout precisely; no rendering changes needed — the
+      existing settled transition already separates `transform` (slide) from
+      `background-color`/`color`/`border-color`/`box-shadow` (merge)
+- [x] `src/hooks/use-game-state.ts` `handleMove` now chains two timeouts:
+      `setTiles(slid)` → after `TILE_ANIMATION_MS`, merge and spawn together
+      in one `setTiles(spawnRandomTile(mergedTiles))` call → after
+      `SETTLE_MS` (`Math.max(MERGE_ANIMATION_MS, SPAWN_ANIMATION_MS)`, since
+      the two run concurrently rather than sequentially) clear `isAnimating`
+      and run win/loss detection
+- [x] `isAnimating` now spans slide + the combined merge/spawn step (200ms +
+      100ms = 300ms), down from the earlier 400ms three-step total, since
+      merge and spawn no longer wait on each other
+- [x] `turbo run lint build --filter=@games/2048 --filter=@app/game` passes
+      cleanly
+- [x] Verified in-browser with a deterministic seeded board (two adjacent
+      equal tiles merging), with the tab kept in focus to avoid background-
+      tab timer throttling skewing the timing: ~100ms showed `["2","2"]`
+      (still separate, mid-slide); ~250ms — right as the slide settles —
+      already showed `["4","2"]`, confirming the merged tile and the newly
+      spawned tile both appeared together in the same step rather than the
+      spawn waiting for a separate merge step to finish first

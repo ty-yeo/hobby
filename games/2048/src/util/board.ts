@@ -54,16 +54,21 @@ const getLine = (direction: Direction, index: number): [number, number][] => {
   }
 };
 
-// Applies a slide+merge in `direction`, preserving tile identity so movement
-// can be animated. Merged pairs collapse into the leading tile's id.
+// Slides tiles toward `direction` and reports two snapshots so callers can
+// animate sliding and merging as separate steps:
+//   - `slid`: every original tile repositioned to its post-slide slot —
+//     a merging pair both land on the *same* cell, values unchanged.
+//   - `tiles`: the final collapsed result — merged pairs become one tile
+//     (keeping the leading tile's id) with the doubled value.
 export const move = (
   tiles: Tile[],
   direction: Direction,
-): { tiles: Tile[]; moved: boolean; gained: number } => {
+): { tiles: Tile[]; slid: Tile[]; moved: boolean; gained: number } => {
   const byPos = new Map<string, Tile>();
   for (const t of tiles) byPos.set(`${t.row},${t.col}`, t);
 
-  const result: Tile[] = [];
+  const merged: Tile[] = [];
+  const slid: Tile[] = [];
   let gained = 0;
   let moved = false;
 
@@ -73,39 +78,38 @@ export const move = (
       .map(([r, c]) => byPos.get(`${r},${c}`))
       .filter((t): t is Tile => t !== undefined);
 
-    const merged: Tile[] = [];
-    let skipNext = false;
-    for (let i = 0; i < lineTiles.length; i++) {
-      if (skipNext) {
-        skipNext = false;
-        continue;
-      }
+    let destIndex = 0;
+    let i = 0;
+    while (i < lineTiles.length) {
       const current = lineTiles[i];
       const next = lineTiles[i + 1];
+      const [destRow, destCol] = positions[destIndex];
+      if (current.row !== destRow || current.col !== destCol) moved = true;
+
       if (next && next.value === current.value) {
-        const mergedValue = current.value * 2;
-        gained += mergedValue;
-        merged.push({ ...current, value: mergedValue });
-        skipNext = true;
+        gained += current.value * 2;
+        slid.push({ ...current, row: destRow, col: destCol });
+        slid.push({ ...next, row: destRow, col: destCol });
+        merged.push({
+          ...current,
+          value: current.value * 2,
+          row: destRow,
+          col: destCol,
+        });
+        i += 2;
       } else {
-        merged.push({ ...current });
+        slid.push({ ...current, row: destRow, col: destCol });
+        merged.push({ ...current, row: destRow, col: destCol });
+        i += 1;
       }
+      destIndex += 1;
     }
-
-    merged.forEach((tile, i) => {
-      const [row, col] = positions[i];
-      if (tile.row !== row || tile.col !== col) moved = true;
-      tile.row = row;
-      tile.col = col;
-    });
-
-    result.push(...merged);
   }
 
   // A merge always changes the board even if the surviving tile didn't move.
-  if (result.length !== tiles.length) moved = true;
+  if (merged.length !== tiles.length) moved = true;
 
-  return { tiles: result, moved, gained };
+  return { tiles: merged, slid, moved, gained };
 };
 
 export const hasAvailableMoves = (tiles: Tile[]): boolean => {

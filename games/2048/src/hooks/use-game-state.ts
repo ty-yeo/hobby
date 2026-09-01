@@ -8,7 +8,11 @@ import {
   useState,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { TILE_ANIMATION_MS } from "../components/tile";
+import {
+  MERGE_ANIMATION_MS,
+  SPAWN_ANIMATION_MS,
+  TILE_ANIMATION_MS,
+} from "../components/tile";
 import {
   createInitialTiles,
   hasAvailableMoves,
@@ -38,6 +42,9 @@ type SavedGameState = {
 
 const STORAGE_KEY = "2048GameState";
 const SWIPE_THRESHOLD = 30;
+// Merge and spawn run concurrently, so the combined step only takes as long
+// as the longer of the two — not their sum.
+const SETTLE_MS = Math.max(MERGE_ANIMATION_MS, SPAWN_ANIMATION_MS);
 
 const KEY_DIRECTIONS: Record<string, Direction> = {
   ArrowUp: "up",
@@ -64,7 +71,8 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
   const [status, setStatus] = useState<GameStatus>("idle");
   const [finalTime, setFinalTime] = useState<number | null>(null);
   const [rank, setRank] = useState<number | null>(null);
-  // Blocks new moves while the 0.2s slide/merge transition is still playing.
+  // Blocks new moves while either animation step (slide, then merge+spawn
+  // together — see `handleMove`) is still playing.
   const [isAnimating, setIsAnimating] = useState(false);
 
   const startTimeRef = useRef(0);
@@ -145,36 +153,55 @@ export const useGameState = (timerRef: React.RefObject<TimerHandle | null>) => {
 
   // The one entry point for applying a move — keyboard and touch input both
   // funnel through this so the two input modes can never behave differently.
+  //
+  // Animation is split into two sequential steps:
+  //   1. Slide — tiles move toward the input direction; a merging pair both
+  //      land on the same cell, still unmerged (two overlapping tiles).
+  //   2. Merge + spawn — once the slide settles, overlapping pairs collapse
+  //      into one doubled tile *and* a new tile appears at the same time
+  //      (they're independent visual changes, so no need to sequence them).
   const handleMove = useCallback(
     (direction: Direction) => {
       if (status === "won" || status === "lost" || isAnimating) return;
 
-      const { tiles: movedTiles, moved, gained } = move(tiles, direction);
+      const {
+        tiles: mergedTiles,
+        slid,
+        moved,
+        gained,
+      } = move(tiles, direction);
       if (!moved) return;
 
-      const spawned = spawnRandomTile(movedTiles);
       const newScore = score + gained;
-      setTiles(spawned);
-      setScore(newScore);
 
-      // Block further input until the slide/merge transition finishes.
+      // Step 1: render the slide result — pairs about to merge still overlap
+      // as two distinct (unmerged) tiles.
+      setTiles(slid);
+      setScore(newScore);
       setIsAnimating(true);
-      clearAnimationTimeout();
-      animationTimeoutRef.current = setTimeout(() => {
-        setIsAnimating(false);
-        animationTimeoutRef.current = null;
-      }, TILE_ANIMATION_MS);
 
       if (status === "idle") {
         setStatus("playing");
         timerRef.current?.resume();
       }
 
-      if (hasReachedTarget(spawned)) {
-        finishWin(newScore);
-      } else if (!hasAvailableMoves(spawned)) {
-        finishLose(newScore);
-      }
+      clearAnimationTimeout();
+      animationTimeoutRef.current = setTimeout(() => {
+        // Step 2: the slide has settled — merge and spawn simultaneously.
+        const spawned = spawnRandomTile(mergedTiles);
+        setTiles(spawned);
+
+        animationTimeoutRef.current = setTimeout(() => {
+          setIsAnimating(false);
+          animationTimeoutRef.current = null;
+
+          if (hasReachedTarget(spawned)) {
+            finishWin(newScore);
+          } else if (!hasAvailableMoves(spawned)) {
+            finishLose(newScore);
+          }
+        }, SETTLE_MS);
+      }, TILE_ANIMATION_MS);
     },
     [tiles, score, status, isAnimating, timerRef, finishWin, finishLose],
   );

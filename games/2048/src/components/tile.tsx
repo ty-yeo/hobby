@@ -1,4 +1,5 @@
 import { useTheme, type UiTheme } from "@core/ui";
+import { useEffect, useState } from "react";
 
 export type TileProps = {
   value: number;
@@ -9,8 +10,15 @@ export type TileProps = {
   cellSize: number;
 };
 
-// Keep in sync with the `duration-200` class below.
+// Slide phase (existing tiles moving toward the input direction).
 export const TILE_ANIMATION_MS = 200;
+// Merge phase — color-mix transition once slid tiles land on the same cell.
+export const MERGE_ANIMATION_MS = 100;
+// Spawn phase (a brand-new tile popping in after the merge settles).
+export const SPAWN_ANIMATION_MS = 100;
+
+const SETTLED_TRANSITION = `transform ${TILE_ANIMATION_MS}ms ease-in-out, background-color ${MERGE_ANIMATION_MS}ms ease-in-out, color ${MERGE_ANIMATION_MS}ms ease-in-out, border-color ${MERGE_ANIMATION_MS}ms ease-in-out, box-shadow ${MERGE_ANIMATION_MS}ms ease-in-out`;
+const ENTERING_TRANSITION = `transform ${SPAWN_ANIMATION_MS}ms ease-out`;
 
 // Value -> palette index; each theme gets its own 11-color progression so
 // every tile value is visually distinct while staying on that theme's palette.
@@ -107,18 +115,39 @@ const TILE_FALLBACK: Record<UiTheme, string> = {
 export const Tile = ({ value, row, col, step, cellSize }: TileProps) => {
   const { theme } = useTheme();
 
+  // A tile mounts once per unique id — new tiles pop in with a quick scale-up,
+  // existing tiles (sliding/merging) skip straight to "settled" since they
+  // were already mounted before this render.
+  const [phase, setPhase] = useState<"initial" | "entering" | "settled">(
+    "initial",
+  );
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setPhase("entering"));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "entering") return;
+    const timeout = setTimeout(() => setPhase("settled"), SPAWN_ANIMATION_MS);
+    return () => clearTimeout(timeout);
+  }, [phase]);
+
   const index = VALUE_ORDER.indexOf(value);
   const colorClass =
     index >= 0 ? TILE_COLORS[theme][index] : TILE_FALLBACK[theme];
   const fontSizeClass = value >= 1000 ? "text-lg" : "text-2xl";
+  const scale = phase === "initial" ? 0 : 1;
 
   return (
     <div
-      className={`absolute top-0 left-0 flex items-center justify-center rounded-lg font-bold select-none transition-transform duration-200 ease-in-out ${fontSizeClass} ${TILE_WRAPPER[theme]} ${colorClass}`}
+      className={`absolute top-0 left-0 flex items-center justify-center rounded-lg font-bold select-none ${fontSizeClass} ${TILE_WRAPPER[theme]} ${colorClass}`}
       style={{
         width: cellSize,
         height: cellSize,
-        transform: `translate(${col * step}px, ${row * step}px)`,
+        transform: `translate(${col * step}px, ${row * step}px) scale(${scale})`,
+        transition:
+          phase === "entering" ? ENTERING_TRANSITION : SETTLED_TRANSITION,
       }}
     >
       {value}
