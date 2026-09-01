@@ -13,7 +13,12 @@ export type BoardProps = {
   hintNumber?: number | null;
   selected?: { row: number; col: number } | null;
   onSelectCell?: (row: number, col: number) => void;
-  onCellChange?: (row: number, col: number, newValue: number, newMemo?: string[]) => void;
+  onCellChange?: (
+    row: number,
+    col: number,
+    newValue: number,
+    newMemo?: string[],
+  ) => void;
 };
 
 const MAX_CELL = 48;
@@ -49,7 +54,12 @@ export const Board = ({
     const el = wrapperRef.current;
     if (!el) return;
     const compute = (w: number) =>
-      setCellSize(Math.max(MIN_CELL, Math.min(MAX_CELL, Math.floor((w - BOARD_OVERHEAD) / 9))));
+      setCellSize(
+        Math.max(
+          MIN_CELL,
+          Math.min(MAX_CELL, Math.floor((w - BOARD_OVERHEAD) / 9)),
+        ),
+      );
     compute(el.clientWidth);
     const ro = new ResizeObserver(([e]) => compute(e.contentRect.width));
     ro.observe(el);
@@ -92,30 +102,48 @@ export const Board = ({
       ) : (
         <div
           className={boardClass}
-          style={{ display: "grid", gridTemplateColumns: trackSizes, gridTemplateRows: trackSizes }}
+          style={{
+            display: "grid",
+            gridTemplateColumns: trackSizes,
+            gridTemplateRows: trackSizes,
+            justifyContent: "center",
+          }}
         >
           {board?.map((row, rowIndex) =>
             row?.map((cell, colIndex) => (
               <div
                 key={`${rowIndex}-${colIndex}`}
-                style={{ gridColumn: trackPosition(colIndex), gridRow: trackPosition(rowIndex) }}
+                style={{
+                  gridColumn: trackPosition(colIndex),
+                  gridRow: trackPosition(rowIndex),
+                }}
               >
                 <BoardCell
-              value={cell}
-              memo={memo?.[rowIndex]?.[colIndex]}
-              isGiven={given?.[rowIndex]?.[colIndex]}
-              isInvalid={invalidCells?.[rowIndex]?.[colIndex]}
-              isSelected={selected?.row === rowIndex && selected?.col === colIndex}
-              isHighlighted={
-                !!displayedNumber && shouldHighlightCell(board, rowIndex, colIndex, displayedNumber)
-              }
-              hintNumber={hintNumber}
-              onSelect={() => onSelectCell?.(rowIndex, colIndex)}
-              onChange={(newValue, newMemo) => onCellChange?.(rowIndex, colIndex, newValue, newMemo)}
-            />
-          </div>
-        )),
-      )}
+                  value={cell}
+                  memo={memo?.[rowIndex]?.[colIndex]}
+                  isGiven={given?.[rowIndex]?.[colIndex]}
+                  isInvalid={invalidCells?.[rowIndex]?.[colIndex]}
+                  isSelected={
+                    selected?.row === rowIndex && selected?.col === colIndex
+                  }
+                  isHighlighted={
+                    !!displayedNumber &&
+                    shouldHighlightCell(
+                      board,
+                      rowIndex,
+                      colIndex,
+                      displayedNumber,
+                    )
+                  }
+                  hintNumber={hintNumber}
+                  onSelect={() => onSelectCell?.(rowIndex, colIndex)}
+                  onChange={(newValue, newMemo) =>
+                    onCellChange?.(rowIndex, colIndex, newValue, newMemo)
+                  }
+                />
+              </div>
+            )),
+          )}
         </div>
       )}
     </div>
